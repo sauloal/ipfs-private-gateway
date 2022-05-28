@@ -1,0 +1,2 @@
+EXTRA_DNS_PREFIX=ipfs
+EXTRA_DNS_SUFFIX=yourdomain.net

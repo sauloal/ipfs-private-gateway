@@ -1,8 +1,18 @@
 #!/bin/bash
 
-set -xeu
+SOURCE_PATH=$(dirname `readlink -f $0`)
+source $SOURCE_PATH/config.sh
 
-EXTRA_DNS=ipfs.aflitos.net
+if [[ -z "${EXTRA_DNS_PREFIX}" ]]; then
+	echo "no extra DNS defined"
+	exit 1
+fi
+if [[ -z "${EXTRA_DNS_SUFFIX}" ]]; then
+	echo "no extra DNS defined"
+	exit 1
+fi
+
+set -xeu
 
 if [[ "$USER" != "ipfs" ]]; then
 	echo "run as ipfs user"
@@ -101,14 +111,64 @@ ipfs config --json Addresses.Gateway '"/ip4/0.0.0.0/tcp/8080"'
 ipfs config show | jq .
 
 cat <<CAT > $HOME/bootstrap.txt
+============
+CONFIG PEER
+============
+
 ipfs bootstrap rm --all
+ipfs bootstrap list #ensure empty
+ipfs daemon &
+ipfs swarm peers #ensure empty
+ipfs shutdown
 
-ipfs bootstrap add /ip4/${PUBLIC_IP}/tcp/4001/p2p/${PEER_ID}
-ipfs bootstrap add /ip4/${PUBLIC_IP}/udp/4001/quic/p2p/${PEER_ID}
-ipfs bootstrap add /dnsaddr/${PUBLIC_HOSTNAME}/p2p/${PEER_ID}
-ipfs bootstrap add /dnsaddr/${EXTRA_DNS}/p2p/${PEER_ID}
+#ipfs bootstrap add /ip4/${PUBLIC_IP}/tcp/4001/p2p/${PEER_ID}
+#ipfs bootstrap add /ip4/${PUBLIC_IP}/udp/4001/quic/p2p/${PEER_ID}
+#ipfs bootstrap add /dnsaddr/${PUBLIC_HOSTNAME}/p2p/${PEER_ID}
+#ipfs bootstrap add /dnsaddr/bootstrap.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/p2p/${PEER_ID}
+ipfs bootstrap add /dns4/bootstrap.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/tcp/4001/ipfs/${PEER_ID}
+ipfs bootstrap add /dns4/bootstrap.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/udp/4001/quic/ipfs/${PEER_ID}
 
-ipfs bootstrap list
+ipfs bootstrap list #ensure 1
+ipfs daemon &
+ipfs swarm peers #ensure ${PEER_ID} is present
+ipfs shutdown
+
+
+============
+DNS
+============
+
+CNAME  ${EXTRA_DNS_PREFIX}                    ${PUBLIC_HOSTNAME}
+CNAME  gateway.${EXTRA_DNS_PREFIX}            ${PUBLIC_HOSTNAME}
+CNAME  bootstrap.${EXTRA_DNS_PREFIX}          ${PUBLIC_HOSTNAME}
+#TXT    _dnsaddr.${EXTRA_DNS_PREFIX}   dnsaddr=/ip4/${PUBLIC_IP}/tcp/4001/p2p/${PEER_ID}
+#TXT    _dnsaddr.bootstrap.${EXTRA_DNS_PREFIX}  dnsaddr=/ip4/${PUBLIC_IP}/tcp/4001/p2p/${PEER_ID}
+TXT    _dnsaddr.${EXTRA_DNS_PREFIX}           dnsaddr=/dns4/${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/tcp/4001/ipfs/${PEER_ID}
+TXT    _dnsaddr.gateway.${EXTRA_DNS_PREFIX}   dnsaddr=/dns4/gateway.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/tcp/8080/ipfs/${PEER_ID}
+TXT    _dnsaddr.bootstrap.${EXTRA_DNS_PREFIX} dnsaddr=/dns4/bootstrap.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/tcp/4001/ipfs/${PEER_ID}
+
+dig +short TXT _dnsaddr.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
+dig +short TXT _dnsaddr.gateway.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
+dig +short TXT _dnsaddr.bootstrap.ipfs.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
+
+curl -v http://gateway.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}:8080/ipfs/
+nc -zvw10 ${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX} 4001
+nc -zvw10 gateway.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX} 4001
+
+============
+DEBUG
+============
+
+#https://docs.ipfs.io/how-to/troubleshooting/#go-debugging
+curl localhost:5001/debug/pprof/goroutine\?debug=2 > ipfs.stacks
+curl localhost:5001/debug/pprof/profile > ipfs.cpuprof
+curl localhost:5001/debug/pprof/heap > ipfs.heap
+curl localhost:5001/debug/vars > ipfs.vars
+curl -X POST localhost:5001/api/v0/swarm/peers
+
+ipfs diag sys > ipfs.sysinfo
+
+
 CAT
 
 echo "BOOTSTRAP ADDRESSES"
