@@ -71,7 +71,8 @@ After=syslog.target network.target remote-fs.target nss-lookup.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/ipfs daemon --enable-namesys-pubsub
+Environment="LIBP2P_FORCE_PNET=1"
+ExecStart=/usr/local/bin/ipfs daemon --enable-namesys-pubsub --enable-gc
 ExecStop=/usr/local/bin/ipfs shutdown
 User=ipfs
 Restart=always
@@ -92,4 +93,7 @@ fi
 
 
 ipfs version
+
+echo "RUN sudo systemctl start ipfs && sudo systemctl status ipfs"
+
 
