@@ -1,14 +1,20 @@
 #!/bin/bash
 
 SOURCE_PATH=$(dirname `readlink -f $0`)
+
+if [[ ! -f "$SOURCE_PATH/config.sh" ]]; then
+	echo "no config file $SOURCE_PATH/config.sh"
+	exit 1
+fi
+
 source $SOURCE_PATH/config.sh
 
 if [[ -z "${EXTRA_DNS_PREFIX}" ]]; then
-	echo "no extra DNS defined EXTRA_DNS_PREFIX"
+	echo "no extra DNS prefix defined EXTRA_DNS_PREFIX"
 	exit 1
 fi
 if [[ -z "${EXTRA_DNS_SUFFIX}" ]]; then
-	echo "no extra DNS defined EXTRA_DNS_SUFFIX"
+	echo "no extra DNS suffix defined EXTRA_DNS_SUFFIX"
 	exit 1
 fi
 if [[ -z "${GATEWAY_IS_PUBLIC}" ]]; then
