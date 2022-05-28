@@ -4,13 +4,26 @@ SOURCE_PATH=$(dirname `readlink -f $0`)
 source $SOURCE_PATH/config.sh
 
 if [[ -z "${EXTRA_DNS_PREFIX}" ]]; then
-	echo "no extra DNS defined"
+	echo "no extra DNS defined EXTRA_DNS_PREFIX"
 	exit 1
 fi
 if [[ -z "${EXTRA_DNS_SUFFIX}" ]]; then
-	echo "no extra DNS defined"
+	echo "no extra DNS defined EXTRA_DNS_SUFFIX"
 	exit 1
 fi
+if [[ -z "${GATEWAY_IS_PUBLIC}" ]]; then
+	echo "no gateway public variable defined GATEWAY_IS_PUBLIC"
+	exit 1
+fi
+if [[ -z "${GATEWAY_INTERNAL_PORT}" ]]; then
+	echo "no gateway internal port defined GATEWAY_INTERNAL_PORT"
+	exit 1
+fi
+if [[ -z "${GATEWAY_EXTERNAL_PORT}" ]]; then
+	echo "no gateway external port defined GATEWAY_EXTERNAL_PORT"
+	exit 1
+fi
+
 
 set -xeu
 
@@ -21,12 +34,18 @@ if [[ "$USER" != "ipfs" ]]; then
 fi
 
 echo "CONFIGURING"
-echo "USER $USER"
-echo "HOME $HOME"
-echo "PWD  $PWD"
+echo "USER                  ${USER}"
+echo "HOME                  ${HOME}"
+echo "PWD                   ${PWD}"
+echo "EXTRA_DNS_PREFIX      ${EXTRA_DNS_PREFIX}"
+echo "EXTRA_DNS_SUFFIX      ${EXTRA_DNS_SUFFIX}"
+echo "GATEWAY_IS_PUBLIC     ${GATEWAY_IS_PUBLIC}"
+echo "GATEWAY_INTERNAL_PORT ${GATEWAY_INTERNAL_PORT}"
+echo "GATEWAY_EXTERNAL_PORT ${GATEWAY_EXTERNAL_PORT}"
 
 # ipfs init [--algorithm=<algorithm> | -a] [--bits=<bits> | -b] [--empty-repo | -e] [--profile=<profile> | -p] [--]
 #            [<default-config>]
+
 
 if [[ ! -f "$HOME/.ipfs/config" ]]; then
 	ipfs init --profile=server
@@ -101,7 +120,13 @@ ipfs config --json Experimental.P2pHttpProxy true
 ipfs config --json Experimental.Libp2pStreamMounting true
 ipfs config --json Experimental.FilestoreEnabled true
 #ipfs config --json Addresses.API '"/ip4/0.0.0.0/tcp/5001"'
-ipfs config --json Addresses.Gateway '"/ip4/0.0.0.0/tcp/8080"'
+
+
+if [[ "${GATEWAY_IS_PUBLIC}" == 1 ]]; then
+ipfs config --json Addresses.Gateway '"/ip4/0.0.0.0/tcp/'${GATEWAY_INTERNAL_PORT}'"'
+else
+ipfs config --json Addresses.Gateway '"/ip4/127.0.0.1/tcp/'${GATEWAY_INTERNAL_PORT}'"'
+fi
 
 # means that you force your node to be private
 # If no private network is configured, the daemon will fail to start.
@@ -109,6 +134,7 @@ ipfs config --json Addresses.Gateway '"/ip4/0.0.0.0/tcp/8080"'
 #ipfs daemon
 
 ipfs config show | jq .
+
 
 cat <<CAT > $HOME/bootstrap.txt
 ============
@@ -141,19 +167,25 @@ DNS
 CNAME  ${EXTRA_DNS_PREFIX}                    ${PUBLIC_HOSTNAME}
 CNAME  gateway.${EXTRA_DNS_PREFIX}            ${PUBLIC_HOSTNAME}
 CNAME  bootstrap.${EXTRA_DNS_PREFIX}          ${PUBLIC_HOSTNAME}
-#TXT    _dnsaddr.${EXTRA_DNS_PREFIX}   dnsaddr=/ip4/${PUBLIC_IP}/tcp/4001/p2p/${PEER_ID}
-#TXT    _dnsaddr.bootstrap.${EXTRA_DNS_PREFIX}  dnsaddr=/ip4/${PUBLIC_IP}/tcp/4001/p2p/${PEER_ID}
-TXT    _dnsaddr.${EXTRA_DNS_PREFIX}           dnsaddr=/dns4/${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/tcp/4001/ipfs/${PEER_ID}
-TXT    _dnsaddr.gateway.${EXTRA_DNS_PREFIX}   dnsaddr=/dns4/gateway.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/tcp/8080/ipfs/${PEER_ID}
+
+TXT    _dnsaddr.${EXTRA_DNS_PREFIX}           dnsaddr=/dns4/${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/tcp/${GATEWAY_EXTERNAL_PORT}/ipfs/${PEER_ID}
+TXT    _dnsaddr.gateway.${EXTRA_DNS_PREFIX}   dnsaddr=/dns4/gateway.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/tcp/${GATEWAY_EXTERNAL_PORT}/ipfs/${PEER_ID}
 TXT    _dnsaddr.bootstrap.${EXTRA_DNS_PREFIX} dnsaddr=/dns4/bootstrap.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/tcp/4001/ipfs/${PEER_ID}
+TXT    _dnsaddr.bootstrap.${EXTRA_DNS_PREFIX} dnsaddr=/dns4/bootstrap.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/udp/4001/quic/ipfs/${PEER_ID}
+
+
+dig +short ${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
+dig +short gateway.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
+dig +short bootstrap.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
 
 dig +short TXT _dnsaddr.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
 dig +short TXT _dnsaddr.gateway.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
-dig +short TXT _dnsaddr.bootstrap.ipfs.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
+dig +short TXT _dnsaddr.bootstrap.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
 
-curl -v http://gateway.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}:8080/ipfs/
-nc -zvw10 ${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX} 4001
-nc -zvw10 gateway.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX} 4001
+curl -v http://${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}:${GATEWAY_EXTERNAL_PORT}/ipfs/
+curl -v http://gateway.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}:${GATEWAY_EXTERNAL_PORT}/ipfs/
+nc -zvw10 bootstrap.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX} 4001
+
 
 ============
 DEBUG
@@ -165,9 +197,7 @@ curl localhost:5001/debug/pprof/profile > ipfs.cpuprof
 curl localhost:5001/debug/pprof/heap > ipfs.heap
 curl localhost:5001/debug/vars > ipfs.vars
 curl -X POST localhost:5001/api/v0/swarm/peers
-
 ipfs diag sys > ipfs.sysinfo
-
 
 CAT
 
