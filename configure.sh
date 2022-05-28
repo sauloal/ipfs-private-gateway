@@ -2,12 +2,12 @@
 
 SOURCE_PATH=$(dirname `readlink -f $0`)
 
-if [[ ! -f "$SOURCE_PATH/config.sh" ]]; then
-	echo "no config file $SOURCE_PATH/config.sh"
+if [[ ! -f "$SOURCE_PATH/settings.sh" ]]; then
+	echo "no config file $SOURCE_PATH/settings.sh"
 	exit 1
 fi
 
-source $SOURCE_PATH/config.sh
+source $SOURCE_PATH/settings.sh
 
 if [[ -z "${EXTRA_DNS_PREFIX}" ]]; then
 	echo "no extra DNS prefix defined EXTRA_DNS_PREFIX"
@@ -15,6 +15,10 @@ if [[ -z "${EXTRA_DNS_PREFIX}" ]]; then
 fi
 if [[ -z "${EXTRA_DNS_SUFFIX}" ]]; then
 	echo "no extra DNS suffix defined EXTRA_DNS_SUFFIX"
+	exit 1
+fi
+if [[ -z "${BOOTSTRAP_EXTERNAL_PORT}" ]]; then
+	echo "no bootstrap external port defined BOOTSTRAP_EXTERNAL_PORT"
 	exit 1
 fi
 if [[ -z "${GATEWAY_IS_PUBLIC}" ]]; then
@@ -40,14 +44,15 @@ if [[ "$USER" != "ipfs" ]]; then
 fi
 
 echo "CONFIGURING"
-echo "USER                  ${USER}"
-echo "HOME                  ${HOME}"
-echo "PWD                   ${PWD}"
-echo "EXTRA_DNS_PREFIX      ${EXTRA_DNS_PREFIX}"
-echo "EXTRA_DNS_SUFFIX      ${EXTRA_DNS_SUFFIX}"
-echo "GATEWAY_IS_PUBLIC     ${GATEWAY_IS_PUBLIC}"
-echo "GATEWAY_INTERNAL_PORT ${GATEWAY_INTERNAL_PORT}"
-echo "GATEWAY_EXTERNAL_PORT ${GATEWAY_EXTERNAL_PORT}"
+echo "USER                    ${USER}"
+echo "HOME                    ${HOME}"
+echo "PWD                     ${PWD}"
+echo "EXTRA_DNS_PREFIX        ${EXTRA_DNS_PREFIX}"
+echo "EXTRA_DNS_SUFFIX        ${EXTRA_DNS_SUFFIX}"
+echo "BOOTSTRAP_EXTERNAL_PORT ${BOOTSTRAP_EXTERNAL_PORT}"
+echo "GATEWAY_IS_PUBLIC       ${GATEWAY_IS_PUBLIC}"
+echo "GATEWAY_INTERNAL_PORT   ${GATEWAY_INTERNAL_PORT}"
+echo "GATEWAY_EXTERNAL_PORT   ${GATEWAY_EXTERNAL_PORT}"
 
 # ipfs init [--algorithm=<algorithm> | -a] [--bits=<bits> | -b] [--empty-repo | -e] [--profile=<profile> | -p] [--]
 #            [<default-config>]
@@ -156,9 +161,9 @@ ipfs shutdown
 #ipfs bootstrap add /ip4/${PUBLIC_IP}/tcp/4001/p2p/${PEER_ID}
 #ipfs bootstrap add /ip4/${PUBLIC_IP}/udp/4001/quic/p2p/${PEER_ID}
 #ipfs bootstrap add /dnsaddr/${PUBLIC_HOSTNAME}/p2p/${PEER_ID}
-#ipfs bootstrap add /dnsaddr/bootstrap.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/p2p/${PEER_ID}
-ipfs bootstrap add /dns4/bootstrap.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/tcp/4001/ipfs/${PEER_ID}
-ipfs bootstrap add /dns4/bootstrap.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/udp/4001/quic/ipfs/${PEER_ID}
+#ipfs bootstrap add /dnsaddr/${EXTRA_DNS_PREFIX}-bootstrap.${EXTRA_DNS_SUFFIX}/p2p/${PEER_ID}
+ipfs bootstrap add /dns4/${EXTRA_DNS_PREFIX}-bootstrap.${EXTRA_DNS_SUFFIX}/tcp/${BOOTSTRAP_EXTERNAL_PORT}/ipfs/${PEER_ID}
+ipfs bootstrap add /dns4/${EXTRA_DNS_PREFIX}-bootstrap.${EXTRA_DNS_SUFFIX}/udp/${BOOTSTRAP_EXTERNAL_PORT}/quic/ipfs/${PEER_ID}
 
 ipfs bootstrap list #ensure 1
 ipfs daemon &
@@ -170,27 +175,28 @@ ipfs shutdown
 DNS
 ============
 
-CNAME  ${EXTRA_DNS_PREFIX}                    ${PUBLIC_HOSTNAME}
-CNAME  gateway.${EXTRA_DNS_PREFIX}            ${PUBLIC_HOSTNAME}
-CNAME  bootstrap.${EXTRA_DNS_PREFIX}          ${PUBLIC_HOSTNAME}
+#CNAME  ${EXTRA_DNS_PREFIX}                    ${PUBLIC_HOSTNAME}
+CNAME  ${EXTRA_DNS_PREFIX}-gateway            ${PUBLIC_HOSTNAME}
+CNAME  ${EXTRA_DNS_PREFIX}-bootstrap          ${PUBLIC_HOSTNAME}
 
-TXT    _dnsaddr.${EXTRA_DNS_PREFIX}           dnsaddr=/dns4/${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/tcp/${GATEWAY_EXTERNAL_PORT}/ipfs/${PEER_ID}
-TXT    _dnsaddr.gateway.${EXTRA_DNS_PREFIX}   dnsaddr=/dns4/gateway.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/tcp/${GATEWAY_EXTERNAL_PORT}/ipfs/${PEER_ID}
-TXT    _dnsaddr.bootstrap.${EXTRA_DNS_PREFIX} dnsaddr=/dns4/bootstrap.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/tcp/4001/ipfs/${PEER_ID}
-TXT    _dnsaddr.bootstrap.${EXTRA_DNS_PREFIX} dnsaddr=/dns4/bootstrap.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/udp/4001/quic/ipfs/${PEER_ID}
+#TXT    _dnsaddr.${EXTRA_DNS_PREFIX}            dnsaddr=/dns4/${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}/tcp/${GATEWAY_EXTERNAL_PORT}/ipfs/${PEER_ID}
+TXT    _dnsaddr.${EXTRA_DNS_PREFIX}-gateway    dnsaddr=/dns4/${EXTRA_DNS_PREFIX}-gateway.${EXTRA_DNS_SUFFIX}/tcp/${GATEWAY_EXTERNAL_PORT}/ipfs/${PEER_ID}
+TXT    _dnsaddr.${EXTRA_DNS_PREFIX}-bootstrap  dnsaddr=/dns4/${EXTRA_DNS_PREFIX}-bootstrap.${EXTRA_DNS_SUFFIX}/tcp/${BOOTSTRAP_EXTERNAL_PORT}/ipfs/${PEER_ID}
+TXT    _dnsaddr.${EXTRA_DNS_PREFIX}-bootstrap  dnsaddr=/dns4/${EXTRA_DNS_PREFIX}-bootstrap.${EXTRA_DNS_SUFFIX}/udp/${BOOTSTRAP_EXTERNAL_PORT}/quic/ipfs/${PEER_ID}
 
 
-dig +short ${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
-dig +short gateway.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
-dig +short bootstrap.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
+#dig +short ${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
+dig +short ${EXTRA_DNS_PREFIX}-gateway.${EXTRA_DNS_SUFFIX}
+dig +short ${EXTRA_DNS_PREFIX}-bootstrap.${EXTRA_DNS_SUFFIX}
 
-dig +short TXT _dnsaddr.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
-dig +short TXT _dnsaddr.gateway.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
-dig +short TXT _dnsaddr.bootstrap.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
+#dig +short TXT _dnsaddr.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}
+dig +short TXT _dnsaddr.${EXTRA_DNS_PREFIX}-gateway.${EXTRA_DNS_SUFFIX}
+dig +short TXT _dnsaddr.${EXTRA_DNS_PREFIX}-bootstrap.${EXTRA_DNS_SUFFIX}
 
-curl -v http://${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}:${GATEWAY_EXTERNAL_PORT}/ipfs/
-curl -v http://gateway.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}:${GATEWAY_EXTERNAL_PORT}/ipfs/
-nc -zvw10 bootstrap.${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX} 4001
+#curl -v http://${EXTRA_DNS_PREFIX}.${EXTRA_DNS_SUFFIX}:${GATEWAY_EXTERNAL_PORT}/ipfs/
+curl -v http://${EXTRA_DNS_PREFIX}-gateway.${EXTRA_DNS_SUFFIX}:${GATEWAY_EXTERNAL_PORT}/ipfs/
+nc -zvw10 ${EXTRA_DNS_PREFIX}-bootstrap.${EXTRA_DNS_SUFFIX} ${BOOTSTRAP_EXTERNAL_PORT}
+nc -zvw10 ${PUBLIC_HOSTNAME} ${BOOTSTRAP_EXTERNAL_PORT}
 
 
 ============
